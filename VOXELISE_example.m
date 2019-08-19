@@ -9,7 +9,7 @@ zco = squeeze( stlcoords(:,3,:) )';
 axis equal
 
 %Voxelise the STL:
-[OUTPUTgrid] = VOXELISE(100,100,100,'sample.stl','xyz');
+[OUTPUTgrid,f] = VOXELISE(100,100,100,'sample.stl','xyz');
 
 %Show the voxelised result:
 figure;
