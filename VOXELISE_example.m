@@ -9,10 +9,12 @@ zco = squeeze( stlcoords(:,3,:) )';
 axis equal
 
 %Voxelise the STL:
-grid = Grid( linspace(-4.5,4.5,100), linspace(-4.5,4.5,100), linspace(-4.5,4.5,100) );
+grid = Grid( linspace(-15,15,100), linspace(-15,15,100), linspace(-15,15,100) );
 stl = READ_stl( "sample.stl" );
 [ fv.faces, fv.vertices ] = CONVERT_meshformat( stl );
-OUTPUTgrid = VOXELISE(grid,fv,'xyz');
+%OUTPUTgrid = VOXELISE(grid,fv,'xyz');
+VV = Voxels( grid, fv, 'xyz' );
+OUTPUTgrid = VV.generate();
 
 %Show the voxelised result:
 figure;
