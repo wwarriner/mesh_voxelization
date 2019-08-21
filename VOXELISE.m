@@ -57,321 +57,389 @@ assert( ischar( rays ) );
 assert( ismember( numel( rays ), 1 : 3 ) );
 assert( all( ismember( rays, 'xyz' ) ) );
 
-meshXYZ = CONVERT_meshformat( fv.faces, fv.vertices );
+mesh = CONVERT_meshformat( fv.faces, fv.vertices );
 
-ray_count = numel( rays );
-
-voxels = false( [ grid.shape ray_count ] );
-faces = uint32( false( [ grid.shape ray_count ] ) );
-direction_count = 0;
+voxels = zeros( grid.shape );
 
 if contains( rays, 'x' )
-    direction_count = direction_count + 1;
     p = [ 2 3 1 ];
     p_inv = [ 3 1 2 ];
-    [ g, f ] = VOXELISEinternal( ...
+    voxels = voxels + permute( VOXELISEinternal( ...
         grid.shape, ...
         grid.data{ p( 1 ) }, ...
         grid.data{ p( 2 ) }, ...
         grid.data{ p( 3 ) }, ...
-        meshXYZ( :, p, : ) ...
-        );
-    voxels( :, :, :, direction_count ) = permute( g, p_inv );
-    faces( :, :, :, direction_count ) = permute( f, p_inv );
-    clear( 'g', 'f' );
+        mesh( :, p, : ) ...
+        ), p_inv );
 end
 
 if contains( rays, 'y' )
-    direction_count = direction_count + 1;
     p = [ 3 1 2 ];
     p_inv = [ 2 3 1 ];
-    [ g, f ] = VOXELISEinternal( ...
+    voxels = voxels + permute( VOXELISEinternal( ...
         grid.shape, ...
         grid.data{ p( 1 ) }, ...
         grid.data{ p( 2 ) }, ...
         grid.data{ p( 3 ) }, ...
-        meshXYZ( :, p, : ) ...
-        );
-    voxels( :, :, :, direction_count ) = permute( g, p_inv );
-    faces( :, :, :, direction_count ) = permute( f, p_inv );
-    clear( 'g', 'f' );
+        mesh( :, p, : ) ...
+        ), p_inv );
 end
 
 if contains( rays, 'z' )
-    direction_count = direction_count + 1;
     p = [ 1 2 3 ];
     p_inv = [ 1 2 3 ];
-    [ g, f ] = VOXELISEinternal( ...
+    voxels = voxels + permute( VOXELISEinternal( ...
         grid.shape, ...
         grid.data{ p( 1 ) }, ...
         grid.data{ p( 2 ) }, ...
         grid.data{ p( 3 ) }, ...
-        meshXYZ( :, p, : ) ...
-        );
-    voxels( :, :, :, direction_count ) = permute( g, p_inv );
-    faces( :, :, :, direction_count ) = permute( f, p_inv );
-    clear( 'g', 'f' );
+        mesh( :, p, : ) ...
+        ), p_inv );
 end
 
-if numel(rays)>1
-    voxels = sum(voxels,4)>=numel(rays)/2;
-    f = sum(faces,4);
-    f( sum(faces>0,4)>1 ) = 0;
-    faces = f;
-end
+voxels = voxels >= numel( rays ) ./ 2;
 
 end
 
 
-function [voxels,faces] = VOXELISEinternal(shape,X,Y,Z,meshXYZ)
+function [ v, f ] = VOXELISEinternal(shape,X,Y,Z,mesh)
 
-voxels = false( shape );
-faces = uint32( false( shape ) );
+% prep
+v = false( shape );
+f = uint32( false( shape ) );
 
-x_index_range = get_index_range( X, meshXYZ( :, 1, : ) );
-y_index_range = get_index_range( Y, meshXYZ( :, 2, : ) );
-z_range = get_z_range( meshXYZ( :, 3, : ) );
+x_index_range = get_index_range( X, mesh( :, 1, : ) );
+y_index_range = get_index_range( Y, mesh( :, 2, : ) );
+z_range = get_z_range( mesh( :, 3, : ) );
 
-mesh_min = min( meshXYZ, [], 3 );
-mesh_max = max( meshXYZ, [], 3 );
+mesh_min = min( mesh, [], 3 );
+mesh_max = max( mesh, [], 3 );
 
-corrections = [];
-for y_index = y_index_range( 1 ) : y_index_range( 2 )
-    cross_y = find( mesh_min(:,2)<=Y(y_index) & mesh_max(:,2)>=Y(y_index) );
-    for x_index = x_index_range( 1 ) : x_index_range( 2 )
-        cross = cross_y( mesh_min(cross_y,1)<=X(x_index) & mesh_max(cross_y,1)>=X(x_index) );
-        
-        if isempty(cross)==0  %Only continue the analysis if some nearby facets were actually identified
-            
-            % - 2 - For each facet, check if the ray really does cross the facet rather than just passing it close-by:
-            
-            % GENERAL METHOD:
-            % A. Take each edge of the facet in turn.
-            % B. Find the position of the opposing vertex to that edge.
-            % C. Find the position of the ray relative to that edge.
-            % D. Check if ray is on the same side of the edge as the opposing vertex.
-            % E. If this is true for all three edges, then the ray definitely passes through the facet.
-            %
-            % NOTES:
-            % A. If a ray crosses exactly on a vertex:
-            %    a. If the surrounding facets have normal components pointing in the same (or opposite) direction as the ray then the face IS crossed.
-            %    b. Otherwise, add the ray to the correctionlist.
-            
-            facetCROSSLIST = [];   %Prepare to record all facets which are crossed by the ray.  This array is built on-the-fly, but since
-            %it ought to be relatively small (typically a list of <10) should not incur too much of a speed penalty.
-            
-            %----------
-            % - 1 - Check for crossed vertices:
-            %----------
-            
-            % Find which mesh facets contain a vertex which is crossed by the ray:
-            vertexCROSSLIST = cross( (meshXYZ(cross,1,1)==X(x_index) & meshXYZ(cross,2,1)==Y(y_index)) ...
-                | (meshXYZ(cross,1,2)==X(x_index) & meshXYZ(cross,2,2)==Y(y_index)) ...
-                | (meshXYZ(cross,1,3)==X(x_index) & meshXYZ(cross,2,3)==Y(y_index)) ...
-                );
-            
-            if isempty(vertexCROSSLIST)==0  %Only continue the analysis if potential vertices were actually identified
-                
-                checkindex = zeros(1,numel(vertexCROSSLIST));
-                
-                while min(checkindex) == 0
-                    
-                    vertexindex             = find(checkindex==0,1,'first');
-                    checkindex(vertexindex) = 1;
-                    
-                    [temp.faces,temp.vertices] = CONVERT_meshformat(meshXYZ(vertexCROSSLIST,:,:));
-                    adjacentindex              = ismember(temp.faces,temp.faces(vertexindex,:));
-                    adjacentindex              = max(adjacentindex,[],2);
-                    checkindex(adjacentindex)  = 1;
-                    
-                    coN = COMPUTE_mesh_normals(meshXYZ(vertexCROSSLIST(adjacentindex),:,:));
-                    
-                    if max(coN(:,3))<0 || min(coN(:,3))>0
-                        facetCROSSLIST    = [facetCROSSLIST,vertexCROSSLIST(vertexindex)];
-                    else
-                        cross = [];
-                        corrections    = [ corrections; x_index,y_index ];
-                        checkindex(:)     = 1;
-                    end
-                    
-                end
-                
-            end
-            
-            %----------
-            % - 2 - Check for crossed facets:
-            %----------
-            
-            if isempty(cross)==0  %Only continue the analysis if some nearby facets were actually identified
-                
-                for loopCHECKFACET = cross'
-                    
-                    %Check if ray crosses the facet.  This method is much (>>10 times) faster than using the built-in function 'inpolygon'.
-                    %Taking each edge of the facet in turn, check if the ray is on the same side as the opposing vertex.
-                    
-                    Y1predicted = meshXYZ(loopCHECKFACET,2,2) - ((meshXYZ(loopCHECKFACET,2,2)-meshXYZ(loopCHECKFACET,2,3)) * (meshXYZ(loopCHECKFACET,1,2)-meshXYZ(loopCHECKFACET,1,1))/(meshXYZ(loopCHECKFACET,1,2)-meshXYZ(loopCHECKFACET,1,3)));
-                    YRpredicted = meshXYZ(loopCHECKFACET,2,2) - ((meshXYZ(loopCHECKFACET,2,2)-meshXYZ(loopCHECKFACET,2,3)) * (meshXYZ(loopCHECKFACET,1,2)-X(x_index))/(meshXYZ(loopCHECKFACET,1,2)-meshXYZ(loopCHECKFACET,1,3)));
-                    
-                    if (Y1predicted >= meshXYZ(loopCHECKFACET,2,1) && YRpredicted >= Y(y_index)) || (Y1predicted <= meshXYZ(loopCHECKFACET,2,1) && YRpredicted <= Y(y_index))
-                        %The ray is on the same side of the 2-3 edge as the 1st vertex.
-                        
-                        Y2predicted = meshXYZ(loopCHECKFACET,2,3) - ((meshXYZ(loopCHECKFACET,2,3)-meshXYZ(loopCHECKFACET,2,1)) * (meshXYZ(loopCHECKFACET,1,3)-meshXYZ(loopCHECKFACET,1,2))/(meshXYZ(loopCHECKFACET,1,3)-meshXYZ(loopCHECKFACET,1,1)));
-                        YRpredicted = meshXYZ(loopCHECKFACET,2,3) - ((meshXYZ(loopCHECKFACET,2,3)-meshXYZ(loopCHECKFACET,2,1)) * (meshXYZ(loopCHECKFACET,1,3)-X(x_index))/(meshXYZ(loopCHECKFACET,1,3)-meshXYZ(loopCHECKFACET,1,1)));
-                        
-                        if (Y2predicted >= meshXYZ(loopCHECKFACET,2,2) && YRpredicted >= Y(y_index)) || (Y2predicted <= meshXYZ(loopCHECKFACET,2,2) && YRpredicted <= Y(y_index))
-                            %The ray is on the same side of the 3-1 edge as the 2nd vertex.
-                            
-                            Y3predicted = meshXYZ(loopCHECKFACET,2,1) - ((meshXYZ(loopCHECKFACET,2,1)-meshXYZ(loopCHECKFACET,2,2)) * (meshXYZ(loopCHECKFACET,1,1)-meshXYZ(loopCHECKFACET,1,3))/(meshXYZ(loopCHECKFACET,1,1)-meshXYZ(loopCHECKFACET,1,2)));
-                            YRpredicted = meshXYZ(loopCHECKFACET,2,1) - ((meshXYZ(loopCHECKFACET,2,1)-meshXYZ(loopCHECKFACET,2,2)) * (meshXYZ(loopCHECKFACET,1,1)-X(x_index))/(meshXYZ(loopCHECKFACET,1,1)-meshXYZ(loopCHECKFACET,1,2)));
-                            
-                            if (Y3predicted >= meshXYZ(loopCHECKFACET,2,3) && YRpredicted >= Y(y_index)) || (Y3predicted <= meshXYZ(loopCHECKFACET,2,3) && YRpredicted <= Y(y_index))
-                                %The ray is on the same side of the 1-2 edge as the 3rd vertex.
-                                
-                                %The ray passes through the facet since it is on the correct side of all 3 edges
-                                facetCROSSLIST = [facetCROSSLIST,loopCHECKFACET];
-                                
-                            end %if
-                        end %if
-                    end %if
-                    
-                end %for
-                
-                
-                %----------
-                % - 3 - Find the z coordinate of the locations where the ray crosses each facet or vertex:
-                %----------
-                
-                gridCOzCROSS = zeros(size(facetCROSSLIST));
-                gridCOzFACE = zeros(size(facetCROSSLIST));
-                for loopFINDZ = facetCROSSLIST
-                    
-                    % METHOD:
-                    % 1. Define the equation describing the plane of the facet.  For a
-                    % more detailed outline of the maths, see:
-                    % http://local.wasp.uwa.edu.au/~pbourke/geometry/planeeq/
-                    %    Ax + By + Cz + D = 0
-                    %    where  A = y1 (z2 - z3) + y2 (z3 - z1) + y3 (z1 - z2)
-                    %           B = z1 (x2 - x3) + z2 (x3 - x1) + z3 (x1 - x2)
-                    %           C = x1 (y2 - y3) + x2 (y3 - y1) + x3 (y1 - y2)
-                    %           D = - x1 (y2 z3 - y3 z2) - x2 (y3 z1 - y1 z3) - x3 (y1 z2 - y2 z1)
-                    % 2. For the x and y coordinates of the ray, solve these equations to find the z coordinate in this plane.
-                    
-                    planecoA = meshXYZ(loopFINDZ,2,1)*(meshXYZ(loopFINDZ,3,2)-meshXYZ(loopFINDZ,3,3)) + meshXYZ(loopFINDZ,2,2)*(meshXYZ(loopFINDZ,3,3)-meshXYZ(loopFINDZ,3,1)) + meshXYZ(loopFINDZ,2,3)*(meshXYZ(loopFINDZ,3,1)-meshXYZ(loopFINDZ,3,2));
-                    planecoB = meshXYZ(loopFINDZ,3,1)*(meshXYZ(loopFINDZ,1,2)-meshXYZ(loopFINDZ,1,3)) + meshXYZ(loopFINDZ,3,2)*(meshXYZ(loopFINDZ,1,3)-meshXYZ(loopFINDZ,1,1)) + meshXYZ(loopFINDZ,3,3)*(meshXYZ(loopFINDZ,1,1)-meshXYZ(loopFINDZ,1,2));
-                    planecoC = meshXYZ(loopFINDZ,1,1)*(meshXYZ(loopFINDZ,2,2)-meshXYZ(loopFINDZ,2,3)) + meshXYZ(loopFINDZ,1,2)*(meshXYZ(loopFINDZ,2,3)-meshXYZ(loopFINDZ,2,1)) + meshXYZ(loopFINDZ,1,3)*(meshXYZ(loopFINDZ,2,1)-meshXYZ(loopFINDZ,2,2));
-                    planecoD = - meshXYZ(loopFINDZ,1,1)*(meshXYZ(loopFINDZ,2,2)*meshXYZ(loopFINDZ,3,3)-meshXYZ(loopFINDZ,2,3)*meshXYZ(loopFINDZ,3,2)) - meshXYZ(loopFINDZ,1,2)*(meshXYZ(loopFINDZ,2,3)*meshXYZ(loopFINDZ,3,1)-meshXYZ(loopFINDZ,2,1)*meshXYZ(loopFINDZ,3,3)) - meshXYZ(loopFINDZ,1,3)*(meshXYZ(loopFINDZ,2,1)*meshXYZ(loopFINDZ,3,2)-meshXYZ(loopFINDZ,2,2)*meshXYZ(loopFINDZ,3,1));
-                    
-                    if abs(planecoC) < 1e-14
-                        planecoC=0;
-                    end
-                    
-                    gridCOzCROSS(facetCROSSLIST==loopFINDZ) = (- planecoD - planecoA*X(x_index) - planecoB*Y(y_index)) / planecoC;
-                    gridCOzFACE(facetCROSSLIST==loopFINDZ) = loopFINDZ;
-                    
-                end %for
-                
-                %Remove values of gridCOzCROSS which are outside of the mesh limits (including a 1e-12 margin for error).
-                gridCOzCROSS = gridCOzCROSS( z_range( 1 ) <= gridCOzCROSS & gridCOzCROSS <= z_range( 2 ) );
-                
-                %Round gridCOzCROSS to remove any rounding errors, and take only the unique values:
-                gridCOzCROSS = round(gridCOzCROSS*1e12)/1e12;
-                [ gridCOzCROSS, ia ] = unique(gridCOzCROSS);
-                gridCOzFACE = gridCOzFACE( ia );
-                
-                %----------
-                % - 4 - Label as being inside the mesh all the voxels that the ray passes through after crossing one facet before crossing another facet:
-                %----------
-                
-                if rem(numel(gridCOzCROSS),2)==0  % Only rays which cross an even number of facets are voxelised
-                    
-                    for loopASSIGN = 1:(numel(gridCOzCROSS)/2)
-                        voxelsINSIDE = (Z>gridCOzCROSS(2*loopASSIGN-1) & Z<gridCOzCROSS(2*loopASSIGN));
-                        voxels(x_index,y_index,voxelsINSIDE) = 1;
-                        faces(x_index,y_index,find(voxelsINSIDE,1)) = gridCOzFACE(2*loopASSIGN-1);
-                        faces(x_index,y_index,find(voxelsINSIDE,1,'last')) = gridCOzFACE(2*loopASSIGN);
-                    end %for
-                    
-                elseif numel(gridCOzCROSS)~=0    % Remaining rays which meet the mesh in some way are not voxelised, but are labelled for correction later.
-                    
-                    corrections = [ corrections; x_index,y_index ];
-                    
-                end %if
-                
-            end
-            
-        end %if
-        
-    end %for
-end %for
+% cull faces that are definitely not crossed using square criteria
+[ crossed, xp, yp, xi, yi, ray_count ] = ...
+    determine_possibly_crossed_faces( ...
+    X, ...
+    x_index_range, ...
+    Y, ...
+    y_index_range, ...
+    mesh_min, ...
+    mesh_max ...
+    );
 
+% build data for faces that may be crossed
+cross_counts = arrayfun( @(x)numel(x{1}), crossed );
+faces = cell2mat( crossed );
+cross_count = numel( faces );
+rays = zeros( cross_count, 1 );
+xpe = zeros( cross_count, 1 );
+ype = zeros( cross_count, 1 );
+start = 1;
+for i = 1 : ray_count
+    finish = cross_counts( i ) + start - 1;
+    rays( start : finish ) = i;
+    xpe( start : finish ) = xp( i );
+    ype( start : finish ) = yp( i );
+    start = finish + 1;
+end
+
+% determine faces that are crossed at a vertex
+[ crossed, corrections ] = determine_possibly_crossed_vertices( ...
+    mesh, ...
+    faces, ...
+    rays, ...
+    xpe, ...
+    ype, ...
+    ray_count ...
+    );
+
+% cull rays that require corrections
+check = ~ismember( rays, find( corrections ) );
+faces = faces( check );
+rays = rays( check );
+xpe = xpe( check );
+ype = ype( check );
+
+% determine faces that are actually crossed by rays
+f_crossed = determine_actual_crossed_faces( ...
+    mesh, ...
+    faces, ...
+    xpe, ...
+    ype, ...
+    rays, ...
+    ray_count ...
+    );
+
+% combine vertex and face crossings
+for i = 1 : ray_count
+    crossed{ i } = [ crossed{ i }; f_crossed{ i } ];
+end
+
+% rebuild data based on actual crossings
+cross_counts = arrayfun( @(x)numel(x{1}), crossed );
+faces = cell2mat( crossed );
+cross_count = numel( faces );
+rays = zeros( cross_count, 1 );
+xpe = zeros( cross_count, 1 );
+xie = zeros( cross_count, 1 );
+ype = zeros( cross_count, 1 );
+yie = zeros( cross_count, 1 );
+start = 1;
+for i = 1 : ray_count
+    finish = cross_counts( i ) + start - 1;
+    rays( start : finish ) = i;
+    xpe( start : finish ) = xp( i );
+    xie( start : finish ) = xi( i );
+    ype( start : finish ) = yp( i );
+    yie( start : finish ) = yi( i );
+    start = finish + 1;
+end
+
+% rays_with_faces = unique( ray );
+% rays_without = setdiff( ( 1 : ray_count ).', rays_with_faces );
+% corrections( rays_without ) = true;
+
+% compute z-values of face crossings
+A = mesh(faces,2,1) .* ( mesh(faces,3,2) - mesh(faces,3,3) ) ...
+    + mesh(faces,2,2) .* ( mesh(faces,3,3) - mesh(faces,3,1) ) ...
+    + mesh(faces,2,3) .* ( mesh(faces,3,1) - mesh(faces,3,2) );
+B = mesh(faces,3,1) .* ( mesh(faces,1,2) - mesh(faces,1,3) ) ...
+    + mesh(faces,3,2) .* ( mesh(faces,1,3) - mesh(faces,1,1) ) ...
+    + mesh(faces,3,3) .* ( mesh(faces,1,1) - mesh(faces,1,2) );
+C = mesh(faces,1,1) .* ( mesh(faces,2,2) - mesh(faces,2,3) ) ...
+    + mesh(faces,1,2) .* ( mesh(faces,2,3) - mesh(faces,2,1) ) ...
+    + mesh(faces,1,3) .* ( mesh(faces,2,1) - mesh(faces,2,2) );
+D = - mesh(faces,1,1) .* ( mesh(faces,2,2).*mesh(faces,3,3) - mesh(faces,2,3).*mesh(faces,3,2) ) ...
+    - mesh(faces,1,2) .* ( mesh(faces,2,3).*mesh(faces,3,1) - mesh(faces,2,1).*mesh(faces,3,3) ) ...
+    - mesh(faces,1,3) .* ( mesh(faces,2,1).*mesh(faces,3,2) - mesh(faces,2,2).*mesh(faces,3,1) );
+
+TOL = 1e-12;
+C( abs( C ) < TOL ) = 0;
+z = -( D + A.*xpe + B.*ype ) ./ C;
+z_faces = faces;
+check = z_range( 1 ) <= z & z <= z_range( 2 );
+z = z( check );
+z_faces = z_faces( check );
+rays = rays( check );
+xie = xie( check );
+yie = yie( check );
+
+ROUND_TOL = 1e12;
+z = round( z * ROUND_TOL ) / ROUND_TOL;
+tt = [ rays xie yie z ];
+tt = sortrows( unique( tt, 'stable', 'rows' ), 1 : size( tt, 2 ) );
+rays = tt( :, 1 );
+xie = tt( :, 2 );
+yie = tt( :, 3 );
+z = tt( :, 4 );
+fill_count = numel( z ./ 2 );
+ind = 1;
+while ind < fill_count
+    if rays( ind ) == rays( ind + 1 )
+        inside = z( ind ) < Z & Z < z( ind + 1 );
+        v( xie( ind ), yie( ind ), inside ) = true;
+        ind = ind + 2;
+    else
+        corrections( rays( ind ) ) = true;
+        ind = ind + 1;
+    end
+end
 
 %======================================================
 % USE INTERPOLATION TO FILL IN THE RAYS WHICH COULD NOT BE VOXELISED
 %======================================================
 %For rays where the voxelisation did not give a clear result, the ray is
 %computed by interpolating from the surrounding rays.
-countCORRECTIONLIST = size(corrections,1);
+countCORRECTIONLIST = sum( corrections );
 
 if countCORRECTIONLIST>0
-    
+    xc = xi( corrections );
+    yc = yi( corrections );
     %If necessary, add a one-pixel border around the x and y edges of the
     %array.  This prevents an error if the code tries to interpolate a ray at
     %the edge of the x,y grid.
-    if min(corrections(:,1))==1 || max(corrections(:,1))==numel(X) || min(corrections(:,2))==1 || max(corrections(:,2))==numel(Y)
-        voxels     = [zeros(1,voxcountY+2,voxcountZ);zeros(voxcountX,1,voxcountZ),voxels,zeros(voxcountX,1,voxcountZ);zeros(1,voxcountY+2,voxcountZ)];
-        faces     = [zeros(1,voxcountY+2,voxcountZ);zeros(voxcountX,1,voxcountZ),faces,zeros(voxcountX,1,voxcountZ);zeros(1,voxcountY+2,voxcountZ)];
-        corrections = corrections + 1;
+    if min(xc)==x_index_range(1) ...
+            || max(xc)==x_index_range(2) ...
+            || min(yc)==y_index_range(1) ...
+            || max(yc)==y_index_range(2)
+        v = [zeros(1,shape(2)+2,shape(3));zeros(shape(1),1,shape(3)),v,zeros(shape(1),1,shape(3));zeros(1,shape(2)+2,shape(3))];
+        f = [zeros(1,shape(2)+2,shape(3));zeros(shape(1),1,shape(3)),f,zeros(shape(1),1,shape(3));zeros(1,shape(2)+2,shape(3))];
+        xi = xi + 1;
+        yi = yi + 1;
     end
     
     for loopC = 1:countCORRECTIONLIST
-        voxelsforcorrection = squeeze( sum( [ voxels(corrections(loopC,1)-1,corrections(loopC,2)-1,:) ,...
-            voxels(corrections(loopC,1)-1,corrections(loopC,2),:)   ,...
-            voxels(corrections(loopC,1)-1,corrections(loopC,2)+1,:) ,...
-            voxels(corrections(loopC,1),corrections(loopC,2)-1,:)   ,...
-            voxels(corrections(loopC,1),corrections(loopC,2)+1,:)   ,...
-            voxels(corrections(loopC,1)+1,corrections(loopC,2)-1,:) ,...
-            voxels(corrections(loopC,1)+1,corrections(loopC,2),:)   ,...
-            voxels(corrections(loopC,1)+1,corrections(loopC,2)+1,:) ,...
+        c = corrections(loopC);
+        xc = xi( c );
+        yc = yi( c );
+        voxelsforcorrection = squeeze( sum( [ ...
+            v(xc-1,yc-1,:),...
+            v(xc-1,yc,:),...
+            v(xc-1,yc+1,:),...
+            v(xc,yc-1,:),...
+            v(xc,yc+1,:),...
+            v(xc+1,yc-1,:),...
+            v(xc+1,yc,:),...
+            v(xc+1,yc+1,:),...
             ] ) );
         voxelsforcorrection = (voxelsforcorrection>=4);
-        voxels(corrections(loopC,1),corrections(loopC,2),voxelsforcorrection) = 1;
-        
-        f = [ faces(corrections(loopC,1)-1,corrections(loopC,2)-1,:) ,...
-            faces(corrections(loopC,1)-1,corrections(loopC,2),:)   ,...
-            faces(corrections(loopC,1)-1,corrections(loopC,2)+1,:) ,...
-            faces(corrections(loopC,1),corrections(loopC,2)-1,:)   ,...
-            faces(corrections(loopC,1),corrections(loopC,2)+1,:)   ,...
-            faces(corrections(loopC,1)+1,corrections(loopC,2)-1,:) ,...
-            faces(corrections(loopC,1)+1,corrections(loopC,2),:)   ,...
-            faces(corrections(loopC,1)+1,corrections(loopC,2)+1,:) ,...
-            ];
-        f( f==0 ) = nan;
-        f = squeeze( mode( f ) );
-        f( isnan( f ) ) = 0;
-        faces(corrections(loopC,1),corrections(loopC,2),voxelsforcorrection) = f(voxelsforcorrection);
-    end %for
+        v(xc,yc,voxelsforcorrection) = true;
+%         
+%         f = [ ...
+%             faces(xc-1,yc-1,:),...
+%             faces(xc-1,yc,:),...
+%             faces(xc-1,yc+1,:),...
+%             faces(xc,yc-1,:),...
+%             faces(xc,yc+1,:),...
+%             faces(xc+1,yc-1,:),...
+%             faces(xc+1,yc,:),...
+%             faces(xc+1,yc+1,:),...
+%             ];
+%         f( f==0 ) = nan;
+%         f = squeeze( mode( f ) );
+%         f( isnan( f ) ) = 0;
+%         faces(corrections(loopC,1),corrections(loopC,2),voxelsforcorrection) = f(voxelsforcorrection);
+    end
     
     %Remove the one-pixel border surrounding the array, if this was added
     %previously.
-    if size(voxels,1)>numel(X) || size(voxels,2)>numel(Y)
-        voxels = voxels(2:end-1,2:end-1,:);
-        faces = faces(2:end-1,2:end-1,:);
+    if size(v,1)>numel(X) || size(v,2)>numel(Y)
+        v = v(2:end-1,2:end-1,:);
+        f = f(2:end-1,2:end-1,:);
     end
     
 end %if
 
-%disp([' Ray tracing result: ',num2str(countCORRECTIONLIST),' rays (',num2str(countCORRECTIONLIST/(voxcountX*voxcountY)*100,'%5.1f'),'% of all rays) exactly crossed a facet edge and had to be computed by interpolation.'])
+%disp([' Ray tracing result: ',num2str(countCORRECTIONLIST),' rays (',num2str(countCORRECTIONLIST/(shape(1)*voxcountY)*100,'%5.1f'),'% of all rays) exactly crossed a facet edge and had to be computed by interpolation.'])
 
 end %function
+
+
+function [ crossed, xp, yp, xi, yi, ray_count ] = ...
+    determine_possibly_crossed_faces( ...
+    X, ...
+    x_index_range, ...
+    Y, ...
+    y_index_range, ...
+    mesh_min, ...
+    mesh_max ...
+    )
+
+x_count = diff( x_index_range ) + 1;
+y_count = diff( y_index_range ) + 1;
+ray_count = x_count * y_count;
+crossed = cell( ray_count, 1 );
+xp = zeros( ray_count, 1 );
+xi = zeros( ray_count, 1 );
+yp = zeros( ray_count, 1 );
+yi = zeros( ray_count, 1 );
+i = 1;
+for y_index = y_index_range( 1 ) : y_index_range( 2 )
+    y = Y( y_index );
+    cross_y = find( y <= mesh_max( :, 2 ) & mesh_min( :, 2 ) <= y );
+    for x_index = x_index_range( 1 ) : x_index_range( 2 )
+        x = X( x_index );
+        check = x <= mesh_max( cross_y, 1 ) & mesh_min( cross_y, 1 ) <= x;
+        if any( check )
+            crossed{ i } = cross_y( check );
+            xp( i ) = x;
+            xi( i ) = x_index;
+            yp( i ) = y;
+            yi( i ) = y_index;
+            i = i + 1;
+        end
+    end
+end
+crossed( i : end ) = [];
+xp( i : end ) = [];
+xi( i : end ) = [];
+yp( i : end ) = [];
+yi( i : end ) = [];
+ray_count = i - 1;
+
+end
+
+
+function [ crossed, corrections ] = determine_possibly_crossed_vertices( ...
+    mesh, ...
+    faces, ...
+    rays, ...
+    xpe, ...
+    ype, ...
+    ray_count ...
+    )
+
+corrections = false( ray_count, 1 );
+crossed = cell( ray_count, 1 );
+check = ( mesh(faces,1,1)==xpe & mesh(faces,2,1)==ype ) ...
+    | ( mesh(faces,1,2)==xpe & mesh(faces,2,2)==ype ) ...
+    | ( mesh(faces,1,3)==xpe & mesh(faces,2,3)==ype );
+check = find( check );
+for i = 1 : numel( check )
+    vi = check( i );
+    [ needs_correction, f ] = find_vertex_crossings( mesh, faces( vi ) );
+    ri = rays( vi );
+    if needs_correction
+        corrections( ri ) = true;
+    end
+    crossed{ ri } = [ crossed{ ri }; f ];
+end
+crossed( corrections ) = {[]};
+
+end
+
+
+function crossed = determine_actual_crossed_faces( ...
+    mesh, ...
+    faces, ...
+    xpe, ...
+    ype, ...
+    rays, ...
+    ray_count ...
+    )
+
+inds = ( 1 : numel( faces ) ).';
+rem = faces;
+xx = xpe;
+yy = ype;
+fy = mesh(rem,2,2) - ((mesh(rem,2,2)-mesh(rem,2,3)) .* (mesh(rem,1,2)-mesh(rem,1,1))./(mesh(rem,1,2)-mesh(rem,1,3)));
+ry = mesh(rem,2,2) - ((mesh(rem,2,2)-mesh(rem,2,3)) .* (mesh(rem,1,2)-xx)./(mesh(rem,1,2)-mesh(rem,1,3)));
+check = (fy >= mesh(rem,2,1) & ry >= yy) | (fy <= mesh(rem,2,1) & ry <= yy);
+
+inds = inds( check );
+rem = rem( check );
+xx = xx( check );
+yy = yy( check );
+fy = mesh(rem,2,3) - ((mesh(rem,2,3)-mesh(rem,2,1)) .* (mesh(rem,1,3)-mesh(rem,1,2))./(mesh(rem,1,3)-mesh(rem,1,1)));
+ry = mesh(rem,2,3) - ((mesh(rem,2,3)-mesh(rem,2,1)) .* (mesh(rem,1,3)-xx)./(mesh(rem,1,3)-mesh(rem,1,1)));
+check = (fy >= mesh(rem,2,2) & ry >= yy) | (fy <= mesh(rem,2,2) & ry <= yy);
+
+inds = inds( check );
+rem = rem( check );
+xx = xx( check );
+yy = yy( check );
+fy = mesh(rem,2,1) - ((mesh(rem,2,1)-mesh(rem,2,2)) .* (mesh(rem,1,1)-mesh(rem,1,3))./(mesh(rem,1,1)-mesh(rem,1,2)));
+ry = mesh(rem,2,1) - ((mesh(rem,2,1)-mesh(rem,2,2)) .* (mesh(rem,1,1)-xx)./(mesh(rem,1,1)-mesh(rem,1,2)));
+check = (fy >= mesh(rem,2,3) & ry >= yy) | (fy <= mesh(rem,2,3) & ry <= yy);
+
+inds = inds( check );
+rem = rem( check );
+crossed = cell( ray_count, 1 );
+for i = 1 : numel( inds )
+    index = inds( i );
+    ri = rays( index );
+    crossed{ ri } = [ crossed{ ri }; rem( i ) ];
+end
+
+end
 
 
 function value = get_index_range( x, mesh_x )
 
 r = [ min( mesh_x, [], 'all' ) max( mesh_x, [], 'all' ) ];
 r_min = x - r( 1 );
-p_min = find( r_min == min( r_min ) );
+p_min = find( r_min == min( r_min ), 1, 'first' );
 r_max = x - r( 2 );
-p_max = find( r_max == max( r_max ) );
+p_max = find( r_max == max( r_max ), 1, 'last' );
 value = sort( [ p_min p_max ] );
 
 end
@@ -384,6 +452,36 @@ value = [ ...
     min( mesh_z, [], 'all' ) - TOL ...
     max( mesh_z, [], 'all' ) + TOL...
     ];
+
+end
+
+
+function [ needs_correction, face_cross ] = find_vertex_crossings( mesh, cross )
+
+needs_correction = false;
+face_cross = [];
+if isempty( cross )
+    return;
+end
+
+check = zeros( 1, numel( cross ) );
+while min( check ) == 0
+    index = find( check == 0, 1, 'first' );
+    check( index ) = 1;
+    
+    [ fv.faces, fv.vertices ] = CONVERT_meshformat( mesh( cross, :, : ) );
+    adjacent = ismember( fv.faces, fv.faces( index, : ) );
+    adjacent = max( adjacent, [], 2 );
+    check( adjacent ) = 1;
+    
+    normals = COMPUTE_mesh_normals( mesh( cross( adjacent ), :, : ) );
+    if max( normals( :, 3 ) ) < 0 || min( normals( :, 3 ) ) > 0
+        face_cross = [ face_cross cross( index ) ]; %#ok<AGROW>
+    else
+        needs_correction = true;
+        break;
+    end
+end
 
 end
 
