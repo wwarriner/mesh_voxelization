@@ -13,8 +13,10 @@ grid = Grid( linspace(-15,15,100), linspace(-15,15,100), linspace(-15,15,100) );
 stl = READ_stl( "sample.stl" );
 [ fv.faces, fv.vertices ] = CONVERT_meshformat( stl );
 %OUTPUTgrid = VOXELISE(grid,fv,'xyz');
-VV = Voxels( grid, fv, 'xyz' );
-OUTPUTgrid = VV.generate();
+RR = Raster( grid, fv, 'xyz' );
+RR.generate();
+OUTPUTgrid = RR.interior;
+norms = RR.normals;
 
 %Show the voxelised result:
 figure;

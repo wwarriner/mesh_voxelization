@@ -1,6 +1,7 @@
 classdef RayRaster < handle
     
-    properties
+    properties ( SetAccess = private, Dependent )
+        interior_array(:,:,:) logical
     end
     
     methods
@@ -22,20 +23,31 @@ classdef RayRaster < handle
             obj.z_value_range = z_value_range;
             obj.mesh_min = mesh_min;
             obj.mesh_max = mesh_max;
+            
+            obj.prepare();
         end
         
-        function v = voxelize( obj )
-            faces = obj.initialize_rays();
-            obj.initialize_crossings( faces );
-            v_cross = obj.identify_vertex_crossings();
-            f_cross = obj.identify_face_crossings();
-            for i = 1 : height( obj.rays )
-                f_cross{ i } = [ v_cross{ i }; f_cross{ i } ];
-            end
-            obj.initialize_crossings( f_cross );
-            obj.compute_z_values();
-            v = obj.construct_voxels();
-            v = obj.correct_voxels( v );
+        function value = get_face_list( obj, permutation )
+            assert( ~isempty( obj.crossings ) );
+            t = [ ...
+                obj.rays.xi( obj.crossings.rays ) ...
+                obj.rays.yi( obj.crossings.rays ) ...
+                obj.crossings.zi ...
+                ];
+            t = t( :, permutation );
+            s = obj.shape( permutation );
+            inds = sub2ind( s, t(:,1), t(:,2), t(:,3) );
+            value = obj.crossings( :, 'faces' );
+            value.indices = inds;
+            value = sortrows( value, 'indices' );
+            lhs = find( ~diff( value.indices ) );
+            rhs = lhs + 1;
+            value( unique( [ lhs; rhs ] ), : ) = [];
+        end
+        
+        function value = get.interior_array( obj )
+            value = obj.construct_voxels();
+            value = obj.correct_voxels( value );
         end
     end
     
@@ -56,6 +68,18 @@ classdef RayRaster < handle
     end
     
     methods ( Access = private )
+        function prepare( obj )
+            faces = obj.initialize_rays();
+            obj.initialize_crossings( faces );
+            v_cross = obj.identify_vertex_crossings();
+            f_cross = obj.identify_face_crossings();
+            for i = 1 : height( obj.rays )
+                f_cross{ i } = [ v_cross{ i }; f_cross{ i } ];
+            end
+            obj.initialize_crossings( f_cross );
+            obj.compute_z_values();
+        end
+        
         function faces = initialize_rays( obj )
             ray_count = obj.compute_initial_ray_count();
             faces = cell( ray_count, 1 );
@@ -199,7 +223,6 @@ classdef RayRaster < handle
             obj.crossings.yie = obj.rays.yi( obj.crossings.rays );
             obj.crossings = sortrows( obj.crossings, { 'rays', 'xie', 'yie', 'z' } );
             v = false( obj.shape );
-            %             f = uint32( false( obj.shape ) );
             fill_count = height( obj.crossings );
             i = 1;
             r = obj.crossings.rays;
@@ -207,21 +230,38 @@ classdef RayRaster < handle
             xie = obj.crossings.xie;
             yie = obj.crossings.yie;
             c = obj.rays.correction;
+            zi = zeros( height( obj.crossings ), 1 );
             while i <= fill_count
                 if i == fill_count
+                    [ ~, m ] = min( abs( obj.Z - z( i ) ) );
+                    zi( i ) = m;
                     c( r( i ) ) = true;
                     break;
                 elseif r( i ) == r( i + 1 )
                     inside = z( i ) < obj.Z & obj.Z < z( i + 1 );
-                    v( xie( i ), yie( i ), inside ) = true;
+                    if any( inside )
+                        v( xie( i ), yie( i ), inside ) = true;
+                        zi( i ) = find( inside, 1, 'first' );
+                        zi( i + 1 ) = find( inside, 1, 'last' );
+                    else
+                        [ ~, m ] = min( abs( obj.Z - z( i ) ) );
+                        zi( i ) = m;
+                        [ ~, m ] = min( abs( obj.Z - z( i + 1 ) ) );
+                        zi( i + 1 ) = m;
+                        c( r( i ) ) = true;
+                        c( r( i + 1 ) ) = true;
+                    end
                     i = i + 2;
                 else
+                    [ ~, m ] = min( abs( obj.Z - z( i ) ) );
+                    zi( i ) = m;
                     c( r( i ) ) = true;
                     i = i + 1;
                 end
             end
             obj.crossings.rays = r;
             obj.crossings.z = z;
+            obj.crossings.zi = zi;
             obj.crossings.xie = [];
             obj.crossings.yie = [];
             obj.rays.correction = c;
@@ -246,6 +286,7 @@ classdef RayRaster < handle
                 yi = yi + 1;
             end
             
+            corrections = obj.rays.correction;
             for i = 1 : correction_count
                 c = corrections( i );
                 xc = xi( c );

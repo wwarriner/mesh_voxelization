@@ -1,7 +1,7 @@
 classdef Grid < handle
     
     properties ( SetAccess = private )
-        data(1,:) cell
+        points(1,:) cell
     end
     
     properties ( SetAccess = private, Dependent )
@@ -32,7 +32,7 @@ classdef Grid < handle
                 end
                 in{ i } = v( : );
             end
-            obj.data = in;
+            obj.points = in;
         end
         
         function value = create_zeros( obj, type )
@@ -40,13 +40,13 @@ classdef Grid < handle
         end
         
         function value = get.dimension_count( obj )
-            value = numel( obj.data );
+            value = numel( obj.points );
         end
         
         function value = get.shape( obj )
             value = nan( 1, obj.dimension_count );
             for i = 1 : obj.dimension_count
-                value( i ) = numel( obj.data{ i } );
+                value( i ) = numel( obj.points{ i } );
             end
             assert( ~any( isnan( value ) ) );
         end
@@ -54,7 +54,7 @@ classdef Grid < handle
         function value = get.origin( obj )
             value = nan( 1, obj.dimension_count );
             for i = 1 : obj.dimension_count
-                d = obj.data{ i };
+                d = obj.points{ i };
                 value( i ) = d( 1 );
             end
             assert( ~any( isnan( value ) ) );
@@ -69,7 +69,7 @@ classdef Grid < handle
         function value = get_end( obj )
             value = nan( 1, obj.dimension_count );
             for i = 1 : obj.dimension_count
-                d = obj.data{ i };
+                d = obj.points{ i };
                 value( i ) = d( end );
             end
             assert( ~any( isnan( value ) ) );
