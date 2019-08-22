@@ -28,7 +28,11 @@ classdef RayRaster < handle
         end
         
         function value = get_face_list( obj, permutation )
-            assert( ~isempty( obj.crossings ) );
+            if isempty( obj.crossings )
+                value = [];
+                return;
+            end
+            
             t = [ ...
                 obj.rays.xi( obj.crossings.rays ) ...
                 obj.rays.yi( obj.crossings.rays ) ...
@@ -147,7 +151,7 @@ classdef RayRaster < handle
             for i = 1 : numel( check )
                 check_index = check( i );
                 [ correction, faces_crossed ] = ...
-                    find_vertex_crossings( f( check_index ) );
+                    obj.find_vertex_crossings( f( check_index ) );
                 ri = r( check_index );
                 c( ri ) = correction;
                 faces{ ri } = [ faces{ ri }; faces_crossed ];
@@ -277,15 +281,9 @@ classdef RayRaster < handle
             xc = xi( obj.rays.correction );
             yi = obj.rays.yi;
             yc = yi( obj.rays.correction );
-            if min( xc ) == obj.x_index_range( 1 ) ...
-                    || max( xc ) == obj.x_index_range( 2 ) ...
-                    || min( yc ) == obj.y_index_range( 1 ) ...
-                    || max( yc ) == obj.y_index_range( 2 )
-                v = padarray( v, [ 1 1 0 ], 0, 'both' );
-                xi = xi + 1;
-                yi = yi + 1;
-            end
-            
+            v = padarray( v, [ 1 1 0 ], 0, 'both' );
+            xi = xi + 1;
+            yi = yi + 1;
             corrections = obj.rays.correction;
             for i = 1 : correction_count
                 c = corrections( i );
@@ -303,10 +301,7 @@ classdef RayRaster < handle
                     ] ) );
                 v( xc, yc, vc >= 4 ) = true;
             end
-            
-            if size( v, 1 ) > numel( obj.X ) || size( v, 2 ) > numel( obj.Y )
-                v = v( 2 : end-1, 2 : end-1, : );
-            end
+            v = v( 2 : end-1, 2 : end-1, : );
         end
         
         function [ correction, faces ] = find_vertex_crossings( obj, cross )
@@ -321,12 +316,12 @@ classdef RayRaster < handle
                 index = find( check == 0, 1, 'first' );
                 check( index ) = 1;
                 
-                [ fv.faces, fv.vertices ] = CONVERT_meshformat( obj.mesh( cross, :, : ) );
+                fv = convert_triangle_geometry_format( obj.mesh( cross, :, : ) );
                 adjacent = ismember( fv.faces, fv.faces( index, : ) );
                 adjacent = max( adjacent, [], 2 );
                 check( adjacent ) = 1;
                 
-                normals = COMPUTE_mesh_normals( obj.mesh( cross( adjacent ), :, : ) );
+                normals = compute_normals( obj.mesh( cross( adjacent ), :, : ) );
                 if max( normals( :, 3 ) ) < 0 || min( normals( :, 3 ) ) > 0
                     faces = [ faces cross( index ) ]; %#ok<AGROW>
                 else
@@ -358,9 +353,9 @@ classdef RayRaster < handle
         function range = compute_index_range( x, mesh_x )
             r = [ min( mesh_x, [], 'all' ) max( mesh_x, [], 'all' ) ];
             r_min = abs( x - r( 1 ) );
-            p_min = find( r_min == min( r_min ) );
+            p_min = find( r_min == min( r_min ), 1, 'first' );
             r_max = abs( x - r( 2 ) );
-            p_max = find( r_max == min( r_max ) );
+            p_max = find( r_max == min( r_max ), 1, 'last' );
             range = sort( [ p_min p_max ] );
         end
         

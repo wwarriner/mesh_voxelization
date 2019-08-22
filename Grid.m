@@ -1,4 +1,16 @@
 classdef Grid < handle
+    % Grid is a class used to represent basic information about a grid,
+    % including how @dimension_count, the @points along each axis, its
+    % @shape in terms of number of points per dimension, and its @origin,
+    % i.e. the vector composed of minimums of @points along each dimension.
+    %
+    % Inputs:
+    %  - Any number of real, finite, increasing double vectors. Each
+    %  represents the grid points along the same number of dimensional
+    %  axes.
+    %  - OR -
+    %  - A cell vector, each element of whcih contains a real, finite,
+    %  increasing double vector, as above.
     
     properties ( SetAccess = private )
         points(1,:) cell
@@ -8,7 +20,6 @@ classdef Grid < handle
         dimension_count(1,1) uint32
         shape(1,:) uint32
         origin(1,:) double
-        envelope Envelope
     end
     
     methods
@@ -48,6 +59,7 @@ classdef Grid < handle
             for i = 1 : obj.dimension_count
                 value( i ) = numel( obj.points{ i } );
             end
+            value = uint32( value );
             assert( ~any( isnan( value ) ) );
         end
         
@@ -58,10 +70,6 @@ classdef Grid < handle
                 value( i ) = d( 1 );
             end
             assert( ~any( isnan( value ) ) );
-        end
-        
-        function value = get.envelope( obj )
-            value = Envelope( obj.origin, obj.get_end() );
         end
     end
     

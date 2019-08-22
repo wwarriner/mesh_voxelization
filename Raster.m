@@ -1,4 +1,35 @@
 classdef Raster < handle
+    % Raster is a class that implements the ray intersection method of
+    % Patil S. and Ravi B [see Patil S and Ravi B.  Voxel-based
+    % representation, display and thickness analysis of intricate shapes.
+    % Ninth International Conference on Computer Aided Design and Computer
+    % Graphics (CAD/CG 2005)].
+    %
+    % It is adapted and heavily modified from the original work
+    % mesh_voxelisation by Adam H. Aitkenhead. [see 
+    % fileexchange/27390-mesh-voxelisation].
+    %
+    % Inputs:
+    %  - @grid, a Grid object.
+    %  - @fv, a typical MATLAB-style FV-struct. Must be manifold and
+    %  watertight to ensure proper operation. Some corrections exist, but
+    %  should not be relied on.
+    %  - @rays, a character array containing any subset of 'xyz'. The empty
+    %  subset is replaced by 'xyz'.
+    %
+    % Properties:
+    %  - @interior, a 3D logical array with dimensions M x N x P, where M is
+    %  the number of elements along the grid x-axis, N along y, and P along
+    %  Z. True values represent points in the interior of @fv.
+    %  - @faces, a table with three columns. The column "indices"
+    %  represents the linear indices into @interior where ray intersections
+    %  occurred. The column "faces" represents the faces involved in the
+    %  intersections. The column "dimension" represents the ray direction
+    %  the intersection occurred along.
+    %  - @normals, a table with four columns. The column "indices"
+    %  represents the linear indices into @interior where the normal is
+    %  given for faces in @faces. The columns "x", "y", and "z" represent
+    %  the components of the normal vector along each axis.
     
     properties ( SetAccess = private )
         interior(:,:,:) logical
@@ -22,11 +53,17 @@ classdef Raster < handle
             assert( isfield( fv, 'faces' ) );
             assert( isfield( fv, 'vertices' ) );
             
+            if isstring( rays )
+                rays = char( rays );
+            end
+            if isempty( rays )
+                rays = 'xyz';
+            end
             assert( ischar( rays ) );
-            assert( ismember( numel( rays ), 1 : 3 ) );
+            assert( all( ismember( numel( rays ), 1 : 3 ) ) );
             assert( all( ismember( rays, 'xyz' ) ) );
             
-            mesh = CONVERT_meshformat( fv.faces, fv.vertices );
+            mesh = convert_triangle_geometry_format( fv );
             dimensions = find( ismember( 'xyz', rays ) );
             
             obj.grid = grid;
@@ -37,7 +74,7 @@ classdef Raster < handle
         end
         
         function value = get.normals( obj )
-            n = COMPUTE_mesh_normals( obj.mesh );
+            n = compute_normals( obj.mesh );
             f = obj.faces;
             value = f( :, : );
             value.faces = [];
@@ -76,8 +113,10 @@ classdef Raster < handle
                 p_inv = obj.get_inverse_permutation( i );
                 v = v + permute( c.interior_array, p_inv );
                 face_list = c.get_face_list( p_inv );
-                face_list.dimension(:) = i;
-                f = [ f; face_list ]; %#ok<AGROW>
+                if ~isempty( face_list )
+                    face_list.dimension(:) = i;
+                    f = [ f; face_list ]; %#ok<AGROW>
+                end
             end
             v = v >= numel( obj.dimensions ) ./ 2;
             
