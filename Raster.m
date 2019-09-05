@@ -36,7 +36,7 @@ classdef Raster < handle
         faces table
     end
     
-    properties ( SetAccess = private )
+    properties ( SetAccess = private, Dependent )
         normals table
     end
     
