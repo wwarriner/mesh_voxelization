@@ -284,9 +284,7 @@ classdef RayRaster < handle
             end
             
             xi = obj.rays.xi;
-            xc = xi( obj.rays.correction );
             yi = obj.rays.yi;
-            yc = yi( obj.rays.correction );
             v = padarray( v, [ 1 1 0 ], 0, 'both' );
             xi = xi + 1;
             yi = yi + 1;
