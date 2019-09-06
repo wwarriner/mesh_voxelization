@@ -236,7 +236,11 @@ classdef RayRaster < handle
             obj.crossings.z = round( z * ROUND_TOL ) / ROUND_TOL;
             check = obj.z_value_range( 1 ) <= obj.crossings.z & obj.crossings.z <= obj.z_value_range( 2 );
             obj.crossings = obj.crossings( check, : );
-            obj.crossings = unique( obj.crossings, 'stable', 'rows' );
+            if ~isempty( obj.crossings )
+                [ ~, ia ] = unique( obj.crossings( :, { 'rays' 'z' } ), 'stable', 'rows' );
+                obj.crossings = obj.crossings( ia, : );
+            end
+            %obj.crossings = unique( obj.crossings, 'stable', 'rows' );
         end
         
         function v = construct_voxels( obj )
