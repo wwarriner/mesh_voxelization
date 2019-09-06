@@ -50,8 +50,12 @@ classdef RayRaster < handle
         end
         
         function value = get.interior_array( obj )
-            value = obj.construct_voxels();
-            value = obj.correct_voxels( value );
+            if isempty( obj.rays ) || isempty( obj.crossings )
+                value = false( obj.shape );
+            else
+                value = obj.construct_voxels();
+                value = obj.correct_voxels( value );
+            end
         end
     end
     
@@ -74,6 +78,9 @@ classdef RayRaster < handle
     methods ( Access = private )
         function prepare( obj )
             faces = obj.initialize_rays();
+            if isempty( faces )
+                return;
+            end
             obj.initialize_crossings( faces );
             v_cross = obj.identify_vertex_crossings();
             f_cross = obj.identify_face_crossings();
@@ -114,10 +121,14 @@ classdef RayRaster < handle
             yp( i : end ) = [];
             yi( i : end ) = [];
             correction = false( i - 1, 1 );
-            obj.rays = table( ...
-                xp, xi, yp, yi, correction, ...
-                'variablenames', { 'xp', 'xi', 'yp', 'yi', 'correction' } ...
-                );
+            if isempty( faces )
+                obj.rays = table();
+            else
+                obj.rays = table( ...
+                    xp, xi, yp, yi, correction, ...
+                    'variablenames', { 'xp', 'xi', 'yp', 'yi', 'correction' } ...
+                    );
+            end
         end
         
         function initialize_crossings( obj, faces )
