@@ -166,24 +166,30 @@ classdef RayRaster < handle
             xx = obj.rays.xp( obj.crossings.rays );
             yy = obj.rays.yp( obj.crossings.rays );
             fy = obj.mesh(rem,2,2) - ((obj.mesh(rem,2,2)-obj.mesh(rem,2,3)) .* (obj.mesh(rem,1,2)-obj.mesh(rem,1,1))./(obj.mesh(rem,1,2)-obj.mesh(rem,1,3)));
-            ry = obj.mesh(rem,2,2) - ((obj.mesh(rem,2,2)-obj.mesh(rem,2,3)) .* (obj.mesh(rem,1,2)-xx)./(obj.mesh(rem,1,2)-obj.mesh(rem,1,3)));
-            check = (fy >= obj.mesh(rem,2,1) & ry >= yy) | (fy <= obj.mesh(rem,2,1) & ry <= yy);
+            ry_slope = (obj.mesh(rem,1,2)-xx)./(obj.mesh(rem,1,2)-obj.mesh(rem,1,3));
+            ry = obj.mesh(rem,2,2) - ((obj.mesh(rem,2,2)-obj.mesh(rem,2,3)) .* ry_slope);
+            vert_check = isnan( ry_slope ) & ( ( xx >= obj.mesh(rem,1,2) & fy >= obj.mesh(rem,2,1) ) | ( xx <= obj.mesh(rem,1,2) & fy <= obj.mesh(rem,2,1) ) );
+            check = (fy >= obj.mesh(rem,2,1) & ry >= yy) | (fy <= obj.mesh(rem,2,1) & ry <= yy) | vert_check;
             
             inds = inds( check );
             rem = rem( check );
             xx = xx( check );
             yy = yy( check );
             fy = obj.mesh(rem,2,3) - ((obj.mesh(rem,2,3)-obj.mesh(rem,2,1)) .* (obj.mesh(rem,1,3)-obj.mesh(rem,1,2))./(obj.mesh(rem,1,3)-obj.mesh(rem,1,1)));
-            ry = obj.mesh(rem,2,3) - ((obj.mesh(rem,2,3)-obj.mesh(rem,2,1)) .* (obj.mesh(rem,1,3)-xx)./(obj.mesh(rem,1,3)-obj.mesh(rem,1,1)));
-            check = (fy >= obj.mesh(rem,2,2) & ry >= yy) | (fy <= obj.mesh(rem,2,2) & ry <= yy);
+            ry_slope = (obj.mesh(rem,1,3)-xx)./(obj.mesh(rem,1,3)-obj.mesh(rem,1,1));
+            ry = obj.mesh(rem,2,3) - ((obj.mesh(rem,2,3)-obj.mesh(rem,2,1)) .* ry_slope);
+            vert_check = isnan( ry_slope ) & ( ( xx >= obj.mesh(rem,1,3) & fy >= obj.mesh(rem,2,2) ) | ( xx <= obj.mesh(rem,1,3) & fy <= obj.mesh(rem,2,2) ) );
+            check = (fy >= obj.mesh(rem,2,2) & ry >= yy) | (fy <= obj.mesh(rem,2,2) & ry <= yy) | vert_check;
             
             inds = inds( check );
             rem = rem( check );
             xx = xx( check );
             yy = yy( check );
             fy = obj.mesh(rem,2,1) - ((obj.mesh(rem,2,1)-obj.mesh(rem,2,2)) .* (obj.mesh(rem,1,1)-obj.mesh(rem,1,3))./(obj.mesh(rem,1,1)-obj.mesh(rem,1,2)));
-            ry = obj.mesh(rem,2,1) - ((obj.mesh(rem,2,1)-obj.mesh(rem,2,2)) .* (obj.mesh(rem,1,1)-xx)./(obj.mesh(rem,1,1)-obj.mesh(rem,1,2)));
-            check = (fy >= obj.mesh(rem,2,3) & ry >= yy) | (fy <= obj.mesh(rem,2,3) & ry <= yy);
+            ry_slope = (obj.mesh(rem,1,1)-xx)./(obj.mesh(rem,1,1)-obj.mesh(rem,1,2));
+            ry = obj.mesh(rem,2,1) - ((obj.mesh(rem,2,1)-obj.mesh(rem,2,2)) .* ry_slope);
+            vert_check = isnan( ry_slope ) & ( ( xx >= obj.mesh(rem,1,1) & fy >= obj.mesh(rem,2,3) ) | ( xx <= obj.mesh(rem,1,1) & fy <= obj.mesh(rem,2,3) ) );
+            check = (fy >= obj.mesh(rem,2,3) & ry >= yy) | (fy <= obj.mesh(rem,2,3) & ry <= yy) | vert_check;
             
             inds = inds( check );
             rem = rem( check );
